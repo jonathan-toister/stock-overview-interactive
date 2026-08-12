@@ -66,7 +66,7 @@ export default function ReportPage() {
   }
 
   if (!summary || !positions || !trades || !dividends) {
-    return <div className="loading">Loading your portfolio…</div>;
+    return <div className="loading">Loading your account…</div>;
   }
 
   return (

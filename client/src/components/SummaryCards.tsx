@@ -19,12 +19,8 @@ function longDate(iso: string): string {
 export default function SummaryCards({ summary, onRefresh, refreshing }: Props) {
   const s = summary;
   const gainPct = s.totalPaid !== 0 ? (s.gainLoss / s.totalPaid) * 100 : null;
-  const resultLabel =
-    gainPct != null
-      ? `${s.gainLoss >= 0 ? 'yours' : 'down'} · ${percent(gainPct)}`
-      : s.gainLoss >= 0
-        ? 'yours'
-        : 'down';
+  const word = s.gainLoss >= 0 ? 'gain' : 'loss';
+  const resultLabel = gainPct != null ? `${word} · ${percent(gainPct)}` : word;
 
   return (
     <section>

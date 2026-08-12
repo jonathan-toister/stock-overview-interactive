@@ -60,14 +60,41 @@ export interface Quote {
   changeTodayPercent: number | null;
 }
 
+export interface FundHolding {
+  symbol: string | null;
+  name: string;
+  percent: number;
+}
+
 export interface CompanyInfo {
   name: string;
+  kind: 'company' | 'fund';
   sector: string | null;
   industry: string | null;
   website: string | null;
+
   marketCap: number | null;
+  yearLow: number | null;
+  yearHigh: number | null;
+  yearChange: number | null;
+  marketYearChange: number | null;
+  beta: number | null;
+
   dividendYield: number | null;
-  summary: string | null;
+  dividendPerShare: number | null;
+  nextDividendDate: string | null;
+
+  priceToEarnings: number | null;
+  earningsPerShare: number | null;
+  profitMargin: number | null;
+  revenue: number | null;
+  revenueGrowth: number | null;
+
+  expenseRatio: number | null;
+  returnYearToDate: number | null;
+  returnThreeYear: number | null;
+  returnFiveYear: number | null;
+  topHoldings: FundHolding[];
 }
 
 export interface StockDetail {

@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api';
 import type { StockDetail } from '../types';
-import { compactNumber, gainClass, money, percent } from '../format';
+import { gainClass, money, percent } from '../format';
 import SumBlock from '../components/SumBlock';
+import KeyIndicators from '../components/KeyIndicators';
 import TradesList from '../components/TradesList';
 import DividendsTable from '../components/DividendsTable';
 
@@ -11,7 +12,6 @@ export default function StockPage() {
   const { symbol = '' } = useParams();
   const [detail, setDetail] = useState<StockDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showFullSummary, setShowFullSummary] = useState(false);
 
   useEffect(() => {
     setDetail(null);
@@ -111,45 +111,15 @@ export default function StockPage() {
         <p className="muted">You don't currently own this stock.</p>
       )}
 
-      {company && (company.marketCap != null || company.dividendYield != null || company.summary) && (
+      {company && (
         <section>
-          <h2>About the company</h2>
-          <div className="company-card">
-            <ul className="facts">
-              {company.marketCap != null && (
-                <li>
-                  The whole company is valued at about{' '}
-                  <strong>${compactNumber(company.marketCap)}</strong>
-                </li>
-              )}
-              {company.dividendYield != null && company.dividendYield > 0 && (
-                <li>
-                  Pays roughly <strong>{(company.dividendYield * 100).toFixed(1)}%</strong> of its
-                  stock price per year back to shareholders as dividends
-                </li>
-              )}
-              {company.website && (
-                <li>
-                  Website:{' '}
-                  <a href={company.website} target="_blank" rel="noreferrer">
-                    {company.website}
-                  </a>
-                </li>
-              )}
-            </ul>
-            {company.summary && (
-              <p className="muted company-summary">
-                {showFullSummary || company.summary.length <= 300
-                  ? company.summary
-                  : `${company.summary.slice(0, 300)}… `}
-                {company.summary.length > 300 && (
-                  <button className="link-btn" onClick={() => setShowFullSummary(!showFullSummary)}>
-                    {showFullSummary ? 'less' : 'read more'}
-                  </button>
-                )}
-              </p>
-            )}
-          </div>
+          <h2>Key numbers</h2>
+          <p className="section-sub">The few measures worth knowing, and what each one means.</p>
+          <KeyIndicators
+            company={company}
+            currency={currency}
+            price={quote?.price ?? pos?.currentPrice ?? null}
+          />
         </section>
       )}
 

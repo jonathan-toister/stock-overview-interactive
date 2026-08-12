@@ -24,8 +24,8 @@ export function signedMoney0(value: number, currency = 'USD'): string {
   return `${value > 0 ? '+' : ''}${money0(value, currency)}`;
 }
 
-export function percent(value: number): string {
-  return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
+export function percent(value: number, digits = 1): string {
+  return `${value > 0 ? '+' : ''}${value.toFixed(digits)}%`;
 }
 
 export function shortDate(iso: string): string {
@@ -50,6 +50,26 @@ export function compactNumber(value: number): string {
   return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(
     value
   );
+}
+
+// Big amounts shortened to something readable: $2.9T, $466.8B
+export function compactMoney(value: number, currency = 'USD'): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+// Turns a fraction into a plain percentage: 0.0345 → "3.5%"
+export function rate(fraction: number, digits = 1): string {
+  return `${(fraction * 100).toFixed(digits)}%`;
+}
+
+// Same, but with a + or − so it reads as a move: 0.307 → "+30.7%"
+export function signedRate(fraction: number, digits = 1): string {
+  return percent(fraction * 100, digits);
 }
 
 // CSS class for coloring gains green and losses red

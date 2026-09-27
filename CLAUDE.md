@@ -4,40 +4,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A personal, read-only dashboard for the user's Interactive Brokers (IBKR) account: React frontend + Express backend, run locally and viewed from any device on the home network. Account data comes from IBKR Flex Query report snapshots; near-live prices/charts/company info come from Yahoo Finance.
+A personal, read-only native Mac app (Swift/SwiftUI, no server) for the user's Interactive Brokers (IBKR) account. Account data comes from IBKR Flex Query report snapshots; near-live prices and company info come from Yahoo Finance. (There used to be a React + Express web version; it was removed in September 2026 and lives on only in git history.)
 
 ## Commands
 
-npm workspaces monorepo (`server/`, `client/`). Run from the repo root:
+A Swift package at the repo root. Only the Command Line Tools are installed (no Xcode), Swift 5.10 / macOS 14 SDK.
 
-- `npm run dev` — server (tsx watch, port 3000) + client (Vite, port 5173) concurrently; Vite proxies `/api` to 3000
-- `npm run build` — `tsc` for server, `tsc -b && vite build` for client
-- `npm start` — production: `node server/dist/index.js`, which also serves `client/dist` so one port (3000) serves everything
-- `npm run test-flex` — verifies IBKR connectivity and that the Flex Query has the required sections (`server/scripts/test-flex.ts`)
-- `npm run lint -w client` — oxlint (client only)
+- `scripts/build-app.sh` — release build wrapped into `build/Portfolio.app`, ad-hoc signed with a fixed designated requirement (`identifier "local.portfolio.ibkr"`) so macOS treats every build as the same app (plain ad-hoc identifies it by one build's hash); `--install` moves (not copies) it to /Applications, since a second copy shows up as a duplicate app
+- `swift build` — debug build
+- `swift scripts/make-icon.swift` — redraws `Resources/AppIcon.icns` (the icon is drawn in code; `Resources/Info.plist` is the bundle's plist, copied in by `build-app.sh`)
+- `swift run portfolio-check --file Fixtures/sample-flex.xml` — prints what the parser makes of the made-up report; `--yahoo SYM` shows Yahoo data; no flag does a real IBKR download with the saved credentials and prints counts only (never amounts)
+- Screens can be checked without a real account: `PORTFOLIO_FIXTURE=<xml> PORTFOLIO_SELECT=AAPL PORTFOLIO_SETUP=<step> PORTFOLIO_SNAPSHOT=<dir> .build/debug/Portfolio` writes a PNG of the window (see `Sources/Portfolio/DevHooks.swift`). The terminal has no screen-recording permission, so `screencapture` doesn't work.
 
 There is no test suite.
 
-The server needs `server/.env` with `FLEX_TOKEN` and `FLEX_QUERY_ID` (copy from `server/.env.example`); without them, `/api/*` returns 503 with a setup message. `.env` and `server/cache/` contain personal account data — never commit or print their contents.
+The IBKR token and Query ID live in `~/Library/Application Support/Portfolio/credentials.sealed`, and the cached report in `account.json` next to it. Both are personal account data — never commit or print their contents.
 
 ## Architecture
 
-Data flow: IBKR Flex Web Service → `flex.ts` (download/parse XML) → `flexProvider.ts` (normalize to app types) → disk + memory cache → `routes.ts` (enrich with Yahoo quotes) → React client.
+Data flow: IBKR Flex Web Service → `FlexClient` (download) → `FlexParser` (XML → app types) → `Portfolio` (memory + disk cache) → `enrichPositions` (Yahoo quotes) → `AppStore` → SwiftUI views.
 
-- `server/src/flex.ts` — two-step Flex download (SendRequest → poll GetStatement with backoff; error code 1019 means "still generating"). Returns raw parsed XML.
-- `server/src/providers/types.ts` — the app's data shapes (`Position`, `Trade`, `Dividend`, `AccountData`) and the `AccountDataProvider` interface. **This interface is the seam for a future live TWS/IB Gateway provider** — new data sources implement `getAccountData()`; routes and UI stay unchanged.
-- `server/src/providers/flexProvider.ts` — converts raw Flex XML into app types. Handles IBKR quirks: multiple date formats, summary vs. detail row levels (`oneLevel`), matching withholding-tax rows to dividend payments by symbol + date proximity, best-effort reinvestment detection (a BUY of the same symbol within 7 days for ~the net amount).
-- `server/src/cache.ts` + `routes.ts` — the Flex report is slow and only updates a few times a day, so the last download is kept in `server/cache/account.json` and in memory. Stale data (>6h) is served immediately while a background refresh runs; `POST /api/refresh` forces one. `inFlight` dedupes concurrent refreshes.
-- `server/src/prices.ts` — Yahoo Finance wrapper with per-key TTL memoization (quotes 5 min, history 1 h, company info 24 h). All functions return `null` on any failure; callers fall back to the IBKR snapshot price (`priceIsLive: false`).
-- `client/src/` — two pages (`ReportPage` at `/`, `StockPage` at `/stock/:symbol`) via react-router; `api.ts` fetches, `types.ts` mirrors the server's enriched response shapes.
-
-The server is ESM (`"type": "module"`): relative imports use `.js` extensions even in `.ts` files.
+- `Sources/PortfolioCore/FlexClient.swift` — two-step Flex download (SendRequest → poll GetStatement with backoff; error code 1019 means "still generating"), plus IBKR error codes → plain messages and which setup step fixes them.
+- `Sources/PortfolioCore/FlexParser.swift` — converts Flex XML into app types. Handles IBKR quirks: multiple date formats, summary vs. detail row levels (`oneLevel`), matching withholding-tax rows to dividend payments by symbol + date proximity, best-effort reinvestment detection (a BUY of the same symbol within 7 days for ~the net amount).
+- `Sources/PortfolioCore/Models.swift` — the app's data shapes (`Position`, `Trade`, `Dividend`, `AccountData`); also the layout of the cached `account.json`.
+- `Sources/PortfolioCore/Portfolio.swift` + `AccountCache.swift` — the Flex report is slow and only updates a few times a day, so the last download is kept on disk and in memory. Stale data (>6h) is shown immediately while a background refresh runs; `inFlight` dedupes concurrent refreshes. `makeSummary` computes the account totals. A future live TWS/IB Gateway data source would replace the download in `Portfolio.refresh()`.
+- `Sources/PortfolioCore/YahooClient.swift` — calls Yahoo's endpoints directly (cookie + crumb handshake) with per-key TTL memoization (quotes 5 min, company info 24 h). Returns `nil` on any failure; callers fall back to the IBKR snapshot price (`priceIsLive: false`).
+- `Sources/PortfolioCore/Credentials.swift` — `CredentialStore` keeps the token and Query ID in `credentials.sealed`, encrypted with a key held by the Secure Enclave (CryptoKit, no entitlements needed): no Keychain, no password prompts, and the file is useless on another Mac. Read once per launch. Earlier versions used the Keychain; the user asked that the app never read or write it again, so don't reintroduce it (for credentials or anything else).
+- `Sources/Portfolio/` — SwiftUI app. `Store.swift` holds state; `Views/SetupGuide.swift` is the step-by-step IBKR onboarding, written for someone who has never heard of a Flex Query (credentials are saved only after a test download passes, and missing report sections are flagged there).
 
 ## Conventions
 
-- Visual language ("set like arithmetic", user-approved after several design rounds): warm paper ground, serif numerals (system Charter/Iowan stack, no webfonts), and every gain/loss rendered as a subtraction — worth now − you paid = gain, result under a drawn double sum-rule — via `client/src/components/SumBlock.tsx`. **No charts or graphs anywhere** — the user explicitly rejected them; don't reintroduce recharts or sparklines.
-- All user-facing sentences (explanations, error messages, README, the arithmetic block) use plain language, not finance jargon — e.g. "what you paid" / "gain or loss", never "cost basis" / "P&L" / "realized/unrealized". Code comments explain financial fields in plain terms too (see `providers/types.ts`).
-- **Exception, and the one place jargon belongs:** each measure in the key-numbers panel (`client/src/components/KeyIndicators.tsx`) is labelled with its *standard* name — "P/E ratio", "Beta", "Expense ratio" — with the plain explanation in the line beneath. Invented plain labels ("How jumpy it is") were tried and rejected: a real name is something the user can look up and will meet on IBKR, and the sentence underneath is what carries the meaning. So: real name as the label, plain English everywhere else.
-- The key-numbers panel is deliberately short — 8 measures for a company, 6 for a fund. The dashboard exists so the user never has to open Yahoo Finance, which they find overwhelming; a new measure has to displace an existing one rather than be added alongside it.
+- Look: Apple Stocks style, chosen by the user (sidebar of positions with coloured change pills, system font, native controls, automatic dark mode). **No charts or graphs anywhere.** The user explicitly rejected them; don't add charts or sparklines.
+- All user-facing sentences (explanations, error messages, README, setup guide) use plain language, not finance jargon: e.g. "what you paid" / "gain or loss", never "cost basis" / "P&L" / "realized/unrealized". Code comments explain financial fields in plain terms too (see `Models.swift`).
+- **Exception, and the one place jargon belongs:** each measure in the key-numbers panel (`Sources/Portfolio/Views/KeyNumbersView.swift`) is labelled with its *standard* name ("P/E ratio", "Beta", "Expense ratio") with the plain explanation in the line beneath. Invented plain labels ("How jumpy it is") were tried and rejected: a real name is something the user can look up and will meet on IBKR, and the sentence underneath is what carries the meaning. So: real name as the label, plain English everywhere else.
+- The key-numbers panel is deliberately short: 8 measures for a company, 6 for a fund. The app exists so the user never has to open Yahoo Finance, which they find overwhelming; a new measure has to displace an existing one rather than be added alongside it.
 - Money amounts are in each position's own currency; account totals assume a single base currency.
-- Route handlers are wrapped so thrown errors become JSON (`wrap` in `routes.ts`): 503 for missing IBKR setup, 502 for upstream failures.

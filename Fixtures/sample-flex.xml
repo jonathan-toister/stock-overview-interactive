@@ -1,0 +1,33 @@
+<!-- Made-up report for testing the parser: fake account, fake numbers. -->
+<FlexQueryResponse queryName="stock-overview" type="AF">
+<FlexStatements count="1">
+<FlexStatement accountId="U0000000" fromDate="20240901" toDate="20250829" period="Last365CalendarDays" whenGenerated="20250830;101500">
+<AccountInformation accountId="U0000000" currency="USD" />
+<CashReport>
+<CashReportCurrency currency="BASE_SUMMARY" endingCash="1234.56" endingSettledCash="1200" />
+<CashReportCurrency currency="USD" endingCash="1234.56" />
+</CashReport>
+<OpenPositions>
+<OpenPosition levelOfDetail="SUMMARY" symbol="AAPL" description="APPLE INC" position="10" costBasisMoney="1500" costBasisPrice="150" markPrice="200" positionValue="2000" currency="USD" />
+<OpenPosition levelOfDetail="LOT" symbol="AAPL" description="APPLE INC" position="10" costBasisMoney="1500" costBasisPrice="150" markPrice="200" positionValue="2000" currency="USD" />
+<OpenPosition levelOfDetail="SUMMARY" symbol="VOO" description="VANGUARD S&amp;P 500 ETF" position="3" costBasisMoney="1200" costBasisPrice="400" markPrice="500" positionValue="1500" currency="USD" />
+<OpenPosition levelOfDetail="SUMMARY" symbol="OLD" description="SOLD OUT CO" position="0" costBasisMoney="0" costBasisPrice="0" markPrice="1" positionValue="0" currency="USD" />
+</OpenPositions>
+<Trades>
+<Trade levelOfDetail="EXECUTION" symbol="AAPL" description="APPLE INC" buySell="BUY" quantity="10" tradePrice="150" tradeMoney="1500" tradeDate="20240915" currency="USD" />
+<Trade levelOfDetail="EXECUTION" symbol="VOO" description="VANGUARD S&amp;P 500 ETF" buySell="BUY" quantity="2.9" tradePrice="400" tradeMoney="1160" tradeDate="2024-10-01" currency="USD" />
+<Trade levelOfDetail="EXECUTION" symbol="VOO" description="VANGUARD S&amp;P 500 ETF" buySell="BUY" quantity="0.1" tradePrice="400" tradeMoney="40" tradeDate="20250403" currency="USD" />
+<Trade levelOfDetail="EXECUTION" symbol="OLD" description="SOLD OUT CO" buySell="SELL" quantity="-5" tradePrice="10" tradeMoney="-50" tradeDate="20250110" currency="USD" />
+<Trade levelOfDetail="ORDER" symbol="OLD" description="SOLD OUT CO" buySell="SELL" quantity="-5" tradePrice="10" tradeMoney="-50" tradeDate="20250110" currency="USD" />
+</Trades>
+<CashTransactions>
+<CashTransaction levelOfDetail="DETAIL" type="Dividends" symbol="AAPL" description="AAPL CASH DIVIDEND" amount="2.50" dateTime="20250515;202000" currency="USD" />
+<CashTransaction levelOfDetail="DETAIL" type="Withholding Tax" symbol="AAPL" description="AAPL US TAX" amount="-0.38" dateTime="20250516;202000" currency="USD" />
+<CashTransaction levelOfDetail="DETAIL" type="Dividends" symbol="VOO" description="VOO CASH DIVIDEND" amount="47" dateTime="20250331;202000" currency="USD" />
+<CashTransaction levelOfDetail="DETAIL" type="Withholding Tax" symbol="VOO" description="VOO US TAX" amount="-7.05" dateTime="20250331;202000" currency="USD" />
+<CashTransaction levelOfDetail="SUMMARY" type="Dividends" symbol="VOO" description="VOO CASH DIVIDEND" amount="47" dateTime="20250331" currency="USD" />
+<CashTransaction levelOfDetail="DETAIL" type="Deposits/Withdrawals" symbol="" description="DEPOSIT" amount="5000" dateTime="20240901" currency="USD" />
+</CashTransactions>
+</FlexStatement>
+</FlexStatements>
+</FlexQueryResponse>

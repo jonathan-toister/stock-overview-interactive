@@ -1,6 +1,5 @@
-node_modules/
-dist/
-server/.env
-server/cache/
+.build/
+build/
+.swiftpm/
 .DS_Store
 *.log

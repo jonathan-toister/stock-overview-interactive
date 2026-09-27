@@ -28,40 +28,49 @@ struct ContentView: View {
         .task { await store.start() }
     }
 
-    @ViewBuilder
+    // The page's scroll view has to be the detail column's own content, not
+    // tucked under the banner in a VStack: otherwise macOS loses track of the
+    // space under the toolbar and the top of the page ends up hidden after
+    // scrolling. The banner rides on top as a safe-area inset instead.
     private var detail: some View {
-        VStack(spacing: 0) {
-            if let problem = store.connectionProblem {
-                Banner(
-                    icon: "exclamationmark.triangle.fill",
-                    tint: .orange,
-                    title: "Your IBKR connection needs attention",
-                    message: problem.message,
-                    buttonTitle: "Fix"
-                ) { store.setupRequest = problem.fix == .queryId ? .queryId : .token }
-            } else if let message = store.errorMessage {
-                Banner(
-                    icon: "wifi.exclamationmark",
-                    tint: .secondary,
-                    title: store.account == nil ? "Couldn't load your account" : "Couldn't update",
-                    message: message + (store.account == nil ? "" : " Showing the last saved report."),
-                    buttonTitle: "Try again"
-                ) { Task { await store.refresh() } }
-            }
+        page.safeAreaInset(edge: .top, spacing: 0) { banner }
+    }
 
-            switch store.selection {
-            case .stock(let symbol):
-                StockView(symbol: symbol)
-                    .id(symbol)
-            default:
-                if store.summary != nil {
-                    AccountView()
-                } else if store.errorMessage == nil && store.connectionProblem == nil {
-                    ProgressView("Loading your account… the first download from IBKR takes about 30 seconds.")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    Spacer()
-                }
+    @ViewBuilder
+    private var banner: some View {
+        if let problem = store.connectionProblem {
+            Banner(
+                icon: "exclamationmark.triangle.fill",
+                tint: .orange,
+                title: "Your IBKR connection needs attention",
+                message: problem.message,
+                buttonTitle: "Fix"
+            ) { store.setupRequest = problem.fix == .queryId ? .queryId : .token }
+        } else if let message = store.errorMessage {
+            Banner(
+                icon: "wifi.exclamationmark",
+                tint: .secondary,
+                title: store.account == nil ? "Couldn't load your account" : "Couldn't update",
+                message: message + (store.account == nil ? "" : " Showing the last saved report."),
+                buttonTitle: "Try again"
+            ) { Task { await store.refresh() } }
+        }
+    }
+
+    @ViewBuilder
+    private var page: some View {
+        switch store.selection {
+        case .stock(let symbol):
+            StockView(symbol: symbol)
+                .id(symbol)
+        default:
+            if store.summary != nil {
+                AccountView()
+            } else if store.errorMessage == nil && store.connectionProblem == nil {
+                ProgressView("Loading your account… the first download from IBKR takes about 30 seconds.")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                Color.clear
             }
         }
     }

@@ -9,23 +9,24 @@ struct SidebarView: View {
     var body: some View {
         @Bindable var store = store
         List(selection: $store.selection) {
-            if let s = store.summary {
-                NavigationLink(value: SidebarItem.account) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("My account").font(.headline)
-                        HStack {
-                            Text(Fmt.money0(s.totalValue, s.currency))
-                                .font(.title3.weight(.semibold).monospacedDigit())
-                            Spacer()
-                            if let pct = s.gainLossPercent {
-                                Text(Fmt.percent(pct))
-                                    .font(.callout.weight(.medium).monospacedDigit())
-                                    .foregroundStyle(Color.gain(pct))
-                            }
+            // Always present, even before the account has loaded: a row that
+            // appears above the others later makes the list keep its old
+            // position, which hides the top of the sidebar under the title bar
+            NavigationLink(value: SidebarItem.account) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("My account").font(.headline)
+                    HStack {
+                        Text(store.summary.map { Fmt.money0($0.totalValue, $0.currency) } ?? "–")
+                            .font(.title3.weight(.semibold).monospacedDigit())
+                        Spacer()
+                        if let pct = store.summary?.gainLossPercent {
+                            Text(Fmt.percent(pct))
+                                .font(.callout.weight(.medium).monospacedDigit())
+                                .foregroundStyle(Color.gain(pct))
                         }
                     }
-                    .padding(.vertical, 6)
                 }
+                .padding(.vertical, 6)
             }
 
             Section("Your stocks") {

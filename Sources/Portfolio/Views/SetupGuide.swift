@@ -53,6 +53,9 @@ struct SetupGuide: View {
                     .padding(28)
                     .frame(maxWidth: .infinity)
             }
+            // A fresh scroll view per step, so each step opens at its top
+            // instead of keeping the last step's scroll position
+            .id(step)
             Divider()
             footer
         }

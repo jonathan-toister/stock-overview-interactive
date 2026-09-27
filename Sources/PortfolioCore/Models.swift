@@ -65,6 +65,8 @@ public struct AccountData: Codable, Sendable {
     public var fetchedAt: String
     /// The date the report data is "as of"
     public var reportDate: String?
+    /// The first day the report's trades and dividends cover (yyyy-MM-dd)
+    public var periodStart: String?
 
     public var fetchedDate: Date {
         ISO8601DateFormatter.withFractions.date(from: fetchedAt)

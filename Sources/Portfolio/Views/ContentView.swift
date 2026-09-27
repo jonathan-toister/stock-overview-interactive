@@ -54,6 +54,14 @@ struct ContentView: View {
                 message: message + (store.account == nil ? "" : " Showing the last saved report."),
                 buttonTitle: "Try again"
             ) { Task { await store.refresh() } }
+        } else if let message = store.historyError {
+            Banner(
+                icon: "clock.arrow.circlepath",
+                tint: .secondary,
+                title: "Couldn't get your older history",
+                message: message + " Showing the years that did arrive.",
+                buttonTitle: "Try again"
+            ) { Task { await store.loadHistory() } }
         }
     }
 
@@ -82,6 +90,10 @@ struct ContentView: View {
                 if store.isRefreshing {
                     ProgressView().controlSize(.small)
                     Text("Updating… (~30s)").foregroundStyle(.secondary)
+                } else if let year = store.historyYear {
+                    ProgressView().controlSize(.small)
+                    Text("Getting older history: \(String(year))…").foregroundStyle(.secondary)
+                        .help("IBKR sends one year at a time. This only happens once.")
                 } else if let date = store.account?.fetchedDate {
                     TimelineView(.periodic(from: .now, by: 60)) { ctx in
                         Text("Updated \(Fmt.timeAgo(date, now: ctx.date))").foregroundStyle(.secondary)

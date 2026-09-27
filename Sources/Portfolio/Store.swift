@@ -26,6 +26,10 @@ final class AppStore {
     var positions: [EnrichedPosition] = []
     var summary: Summary?
     var isRefreshing = false
+    /// The year being downloaded while older history loads (nil when idle)
+    var historyYear: Int?
+    /// Why older history couldn't be downloaded, if it failed
+    var historyError: String?
     /// A general problem (no internet, IBKR busy…), shown with "Try again"
     var errorMessage: String?
     /// A problem with the token or Query ID — the setup guide can fix it
@@ -53,6 +57,32 @@ final class AppStore {
         } else {
             await refresh()
         }
+        await loadHistory()
+    }
+
+    /// Download the years before the regular report, if not done already.
+    func loadHistory() async {
+        guard isConnected, historyYear == nil, await Portfolio.shared.needsBackfill() else { return }
+        historyError = nil
+        defer { historyYear = nil }
+        do {
+            let data = try await Portfolio.shared.backfillHistory { year in
+                await MainActor.run { self.historyYear = year }
+            }
+            if let data { await show(data) }
+        } catch {
+            historyError = error.localizedDescription
+            // Show whatever years did arrive
+            if let data = await Portfolio.shared.cachedData() { await show(data) }
+        }
+    }
+
+    /// Throw away the older years and download them again.
+    func reloadHistory() async {
+        guard historyYear == nil else { return }
+        await Portfolio.shared.forgetHistory()
+        if let data = await Portfolio.shared.cachedData() { await show(data) }
+        await loadHistory()
     }
 
     func refresh() async {
@@ -98,6 +128,7 @@ final class AppStore {
     func finishSetup() {
         isConnected = CredentialStore.load() != nil
         setupRequest = nil
+        Task { await loadHistory() }
     }
 
     func disconnect() async {
@@ -107,6 +138,7 @@ final class AppStore {
         account = nil
         positions = []
         summary = nil
+        historyError = nil
         connectionProblem = nil
         errorMessage = nil
         selection = .account

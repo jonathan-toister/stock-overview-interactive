@@ -14,8 +14,13 @@ public enum PortfolioError: LocalizedError, Sendable {
 public actor Portfolio {
     public static let shared = Portfolio()
 
+    /// The last regular report as downloaded (the most recent 365 days)
     private var memoryCache: AccountData?
     private var inFlight: Task<AccountData, Error>?
+    /// Trades and dividends from before the regular report (nil until the first backfill)
+    private var history: AccountHistory?
+    private var historyLoaded = false
+    private var backfilling = false
 
     /// Where the IBKR token and Query ID come from (the details saved on this Mac by default).
     public var credentials: @Sendable () -> Credentials? = { CredentialStore.load() }
@@ -44,27 +49,142 @@ public actor Portfolio {
         inFlight = task
         defer { inFlight = nil }
         let data = try await task.value
-        memoryCache = data
-        try? AccountCache.save(data)
-        return data
+        store(data)
+        return withHistory(data)
     }
 
     /// The saved report straight away (nil if there isn't one yet).
     public func cachedData() -> AccountData? {
         if memoryCache == nil { memoryCache = AccountCache.load() }
-        return memoryCache
+        return memoryCache.map(withHistory)
     }
 
     /// Use a report that was already downloaded (by the setup guide's test).
     public func adopt(_ data: AccountData) {
-        memoryCache = data
-        try? AccountCache.save(data)
+        store(data)
     }
 
     /// Forget everything downloaded (used when disconnecting).
     public func reset() {
         memoryCache = nil
+        history = nil
+        historyLoaded = true
         AccountCache.clear()
+        HistoryCache.clear()
+    }
+
+    /// Throw away the older years so the next backfill downloads them again.
+    public func forgetHistory() {
+        history = nil
+        historyLoaded = true
+        HistoryCache.clear()
+    }
+
+    /// Whether older years still need downloading.
+    public func needsBackfill() -> Bool {
+        guard fixture == nil, cachedData() != nil else { return false }
+        return loadHistory().map { !$0.complete } ?? true
+    }
+
+    private func loadHistory() -> AccountHistory? {
+        if !historyLoaded {
+            history = HistoryCache.load()
+            historyLoaded = true
+        }
+        return history
+    }
+
+    private func store(_ data: AccountData) {
+        carryOver(from: memoryCache ?? AccountCache.load(), to: data)
+        memoryCache = data
+        try? AccountCache.save(data)
+    }
+
+    /// The regular report always covers the last 365 days, so each new one
+    /// starts a little later than the one before. Move the days that just fell
+    /// out of it into the history, so nothing goes missing in between.
+    private func carryOver(from old: AccountData?, to new: AccountData) {
+        guard var h = loadHistory(), let newStart = new.periodStart, h.coversTo < newStart else { return }
+        if let old {
+            let moving = { (date: String) in date >= h.coversTo && date < newStart }
+            // Newest first, like the rest of the lists
+            h.trades = old.trades.filter { moving($0.date) } + h.trades
+            h.dividends = old.dividends.filter { moving($0.date) } + h.dividends
+        }
+        h.coversTo = newStart
+        history = h
+        try? HistoryCache.save(h)
+    }
+
+    /// The regular report with the older years added on.
+    private func withHistory(_ recent: AccountData) -> AccountData {
+        guard let h = loadHistory() else { return recent }
+        let cutoff = recent.periodStart ?? h.coversTo
+        var merged = recent
+        merged.trades += h.trades.filter { $0.date < cutoff }
+        merged.dividends += h.dividends.filter { $0.date < cutoff }
+        return merged
+    }
+
+    /// Download the years before the regular report, one year at a time
+    /// (IBKR's limit), going back until there's nothing left. Saves after each
+    /// year, so if it stops half way the next run carries on from there.
+    /// `progress` gets the year being downloaded. Returns the full data.
+    public func backfillHistory(progress: @Sendable (Int) async -> Void = { _ in }) async throws -> AccountData? {
+        guard fixture == nil, !backfilling, let creds = credentials() else { return nil }
+        backfilling = true
+        defer { backfilling = false }
+        // Reports saved by earlier versions don't record where they start
+        if cachedData()?.periodStart == nil { _ = try await refresh() }
+        guard let start = cachedData()?.periodStart else { return nil }
+        if history == nil {
+            history = AccountHistory(coversFrom: start, coversTo: start)
+            try? HistoryCache.save(history!)
+        }
+        let oldest = shiftDay(start, by: -25 * 365) ?? "1990-01-01"
+
+        while let h = history, !h.complete {
+            guard let to = shiftDay(h.coversFrom, by: -1), let from = shiftDay(to, by: -364) else { break }
+            await progress(Int(from.prefix(4)) ?? 0)
+            // IBKR allows about 10 report requests a minute
+            try await Task.sleep(for: .seconds(6))
+
+            let stmt: FlexStatement
+            do {
+                stmt = try await fetchFlexStatement(token: creds.token, queryId: creds.queryId, from: from, to: to)
+            } catch let error as FlexError where error.code == "1003" || (error.fix == nil && h.emptyYears > 0) {
+                // 1003 "Statement is not available": IBKR has nothing for
+                // those dates, i.e. they're from before the account existed.
+                // (After an empty year, any refusal is taken to mean the same.)
+                markComplete()
+                break
+            }
+            guard flexDate(stmt.toDate) == to else {
+                throw FlexError(message: "IBKR sent the usual report instead of the older dates that were asked for, so older history can't be downloaded this way.")
+            }
+            let year = accountData(from: stmt)
+
+            // Re-read: a regular update may have changed the history while we waited
+            guard var current = history else { break }
+            current.trades += year.trades
+            current.dividends += year.dividends
+            let empty = year.trades.isEmpty && year.dividends.isEmpty
+            current.emptyYears = empty ? current.emptyYears + 1 : 0
+            current.coversFrom = from
+            // IBKR starts the report later than asked when the account opened part way through
+            let startedLate = stmt.fromDate.map(flexDate).map { $0 > from } ?? false
+            current.complete = current.emptyYears >= 2 || startedLate || from <= oldest
+            history = current
+            try? HistoryCache.save(current)
+        }
+        return cachedData()
+    }
+
+    private func markComplete() {
+        guard var h = history else { return }
+        h.complete = true
+        history = h
+        try? HistoryCache.save(h)
     }
 }
 

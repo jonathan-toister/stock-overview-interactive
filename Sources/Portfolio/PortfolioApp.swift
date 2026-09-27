@@ -34,6 +34,8 @@ struct PortfolioApp: App {
                 Button("Update prices only") { Task { await store.refreshPrices() } }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
                     .disabled(store.account == nil)
+                Button("Download older history again") { Task { await store.reloadHistory() } }
+                    .disabled(!store.isConnected || store.historyYear != nil)
                 Divider()
                 Button("Reconnect IBKR…") { store.setupRequest = .welcome }
                     .disabled(!store.isConnected)

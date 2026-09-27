@@ -10,6 +10,10 @@ import PortfolioCore
 //   swift run portfolio-check
 //       Download the report and print a connection check. Prints only counts,
 //       never amounts, so account figures don't end up in logs.
+//   swift run portfolio-check --history
+//       Download the years before the regular report (as the app does, and
+//       into the same saved file) and print how many trades and dividends
+//       each year has. Counts only.
 //
 // IBKR details are the ones saved by the app's setup guide.
 
@@ -64,6 +68,32 @@ if let symbol = option("--yahoo") {
 guard let creds = CredentialStore.load() else {
     fail("No IBKR details found — connect your account in the app first.")
 }
+if args.contains("--history") {
+    let portfolio = Portfolio.shared
+    if await portfolio.cachedData() == nil {
+        print("No saved report yet — downloading the regular one first...")
+        do { _ = try await portfolio.refresh() } catch { fail(error.localizedDescription) }
+    }
+    let start = await portfolio.cachedData()?.periodStart
+    print("Regular report starts \(start ?? "?")")
+    let data: AccountData?
+    do {
+        data = try await portfolio.backfillHistory { year in print("  getting \(year)...") }
+    } catch let error as FlexError {
+        fail(error.message + (error.code.map { " (IBKR code \($0))" } ?? ""))
+    } catch { fail(error.localizedDescription) }
+    let saved = await portfolio.cachedData()
+    guard let data = data ?? saved else { fail("Nothing to show.") }
+    let years = Set(data.trades.map { $0.date.prefix(4) } + data.dividends.map { $0.date.prefix(4) }).sorted()
+    print("\n✓ History by year:")
+    for y in years {
+        let t = data.trades.filter { $0.date.hasPrefix(y) }.count
+        let d = data.dividends.filter { $0.date.hasPrefix(y) }.count
+        print("  \(y):  \(t) trades, \(d) dividends")
+    }
+    exit(0)
+}
+
 print("Requesting your report from IBKR (can take ~10-30 seconds)...")
 let stmt: FlexStatement
 do { stmt = try await fetchFlexStatement(token: creds.token, queryId: creds.queryId) } catch {

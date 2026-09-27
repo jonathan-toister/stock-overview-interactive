@@ -246,6 +246,7 @@ public func accountData(from stmt: FlexStatement, fetchedAt: Date = Date()) -> A
         dividends: parseDividends(stmt, trades: trades),
         balances: parseBalances(stmt),
         fetchedAt: ISO8601DateFormatter.withFractions.string(from: fetchedAt),
-        reportDate: stmt.toDate.map(flexDate)
+        reportDate: stmt.toDate.map(flexDate),
+        periodStart: stmt.fromDate.map(flexDate)
     )
 }

@@ -19,6 +19,8 @@ public struct FlexError: LocalizedError, Sendable {
     public var message: String
     /// Set when the fix is to change the token or Query ID
     public var fix: ConnectionFix?
+    /// IBKR's error number, when the problem came from IBKR
+    public var code: String?
 
     public init(message: String, fix: ConnectionFix? = nil) {
         self.message = message
@@ -29,6 +31,12 @@ public struct FlexError: LocalizedError, Sendable {
 
     /// Turns IBKR's numbered error codes into plain sentences.
     static func fromIBKR(code: String?, message ibkrMessage: String?) -> FlexError {
+        var error = plain(code: code, message: ibkrMessage)
+        error.code = code
+        return error
+    }
+
+    private static func plain(code: String?, message ibkrMessage: String?) -> FlexError {
         switch code {
         case "1012":
             return FlexError(message: "Your IBKR token has expired. Make a new one on the IBKR website — it takes a minute.", fix: .token)
@@ -74,8 +82,14 @@ private func encode(_ s: String) -> String {
     s.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? s
 }
 
-public func fetchFlexStatement(token: String, queryId: String) async throws -> FlexStatement {
-    let send = try await fetchFlex("\(base)/SendRequest?t=\(encode(token))&q=\(encode(queryId))&v=3")
+/// Pass `from`/`to` (yyyy-MM-dd, at most 365 days apart) to ask for those dates
+/// instead of the Period saved in the query on IBKR.
+public func fetchFlexStatement(token: String, queryId: String, from: String? = nil, to: String? = nil) async throws -> FlexStatement {
+    var range = ""
+    if let from, let to {
+        range = "&fd=\(from.replacingOccurrences(of: "-", with: ""))&td=\(to.replacingOccurrences(of: "-", with: ""))"
+    }
+    let send = try await fetchFlex("\(base)/SendRequest?t=\(encode(token))&q=\(encode(queryId))&v=3\(range)")
     guard case .status(let sendResp) = send, sendResp["Status"] == "Success",
           let refCode = sendResp["ReferenceCode"] else {
         if case .status(let s) = send { throw FlexError.fromIBKR(code: s["ErrorCode"], message: s["ErrorMessage"]) }
